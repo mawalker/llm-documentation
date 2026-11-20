@@ -1,2 +1,1 @@
-# llm-documentation
-Documentation for LLMs 
+This is a mdbook structured guide to LLMs and documents how they work and how to interact with them.
