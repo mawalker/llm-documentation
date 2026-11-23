@@ -1,95 +1,114 @@
-## LLM Harnesses *(new major section)*
+# LLM Harnesses
 
-### What a Harness Is
-- Definition: the runtime layer that wraps a model — manages the loop, context, tool dispatch, streaming, session state
+> Setup details below were checked against upstream docs on 2026-11-23. These tools change often, so re-check before relying on exact commands.
+
+## What a Harness Is
+- Definition: the runtime layer that wraps a model. It manages the loop, context, tool dispatch, streaming and session state
 - Why you need one (vs. raw API calls): orchestration, persistence, multi-turn state, tool execution, safety rails
 - Anatomy of a harness: agent loop, context manager, tool registry, provider adapter, config layer, extension/skill system
 - How a harness differs from an "agent framework" vs. a "chatbot backend" vs. a "RAG pipeline"
 
-### Choosing a Harness
+## Common Harness Features
+- Permissions and approval modes: what the agent may do without asking (edit files, run shell commands, use the network)
+- Sandboxing: containers, remote backends, restricted directories
+- Hooks / lifecycle events: run your own code before or after tool calls, on session start, on compaction
+  - Pi: extension events (`pi.on("tool_call", …)`); opencode: plugin hooks; Hermes: event hooks
+- Sessions: resume, fork/branch, compaction
+  - Pi: `pi --resume` / `/resume`, session fork; Hermes: `hermes --resume <id>`, `/compress`
+- Project instruction files (`AGENTS.md`). See [Project Instruction Files](../project-instruction-files/project-instruction-files.md)
+
+## Choosing a Harness
 - Comparison dimensions: extensibility, model-agnosticism, deployment target (terminal / server / embedded), language, community, license
 - When to use a harness vs. raw SDK
+- The wider landscape, for orientation: Claude Code, Codex CLI ([openai/codex](https://github.com/openai/codex)), Gemini CLI ([google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli)), Cursor, plus the three covered below
 - Decision matrix for the three tools below
 
-### Pi
+## Pi
 - *Overview*
-  - What it is: minimalist, extensible terminal-based AI agent (TypeScript)
-  - Design philosophy: small core, maximal extensibility, provider-agnostic
-  - Key differentiators vs. opencode / hermes (footprint, extension model, config simplicity)
+  - What it is: a minimal, extensible agent harness written in TypeScript ([earendil-works/pi](https://github.com/earendil-works/pi), [pi.dev](https://pi.dev))
+  - Design philosophy: small core, maximal extensibility, provider-agnostic. Deliberately ships **without** sub-agents or plan mode; add them through extensions or packages
+  - Modes: interactive, print/JSON mode, RPC, and a TypeScript SDK
 - *Setup Guide*
-  - Prerequisites: Node.js ≥ 18, an API key (Anthropic / OpenAI / local model endpoint)
-  - Install: `npm install -g pi-agent` (or `bun install -g pi-agent`)
-  - First run: `pi` in a project directory; interactive REPL
-  - Configuration: `pi.config.ts` — model selection, provider base-URL, system prompt override, max tokens
-  - Provider setup examples:
-    - Anthropic (API key via env or config)
-    - OpenAI (API key, model ID)
-    - Local model via Ollama / LM Studio (OpenAI-compatible endpoint)
-  - Verifying the install: run a simple one-shot prompt, confirm streaming
+  - Prerequisites: Node.js **≥ 22.19** (the installer can install it). A `legacy-node20` npm tag exists for older Node
+  - Install:
+    - `curl -fsSL https://pi.dev/install.sh | sh` (pins dependencies; update with `pi update`)
+    - or `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`
+    - (The old package name `@mariozechner/pi-coding-agent` is deprecated.)
+  - First run: `pi` in a project directory, then `/login` to connect a subscription or API key
+  - Configuration: `settings.json` in `~/.pi/agent/` (global) and `.pi/` (project). Project settings override global ones
+    - e.g. `defaultProvider`, `defaultModel`, `defaultThinkingLevel`
+  - Provider setup examples: Anthropic, OpenAI, local model via Ollama / LM Studio (OpenAI-compatible endpoint)
+  - Verifying the install: run a simple one-shot prompt in print mode, confirm streaming
 - *Extending Pi*
-  - Extension anatomy: a TypeScript module exporting a named skill/tool
-  - Writing your first custom tool (e.g., a `fetchUrl` function the model can call)
-  - Loading extensions: project-level (`./pi/extensions/`) vs. global
-  - Hot-reload behavior during a session
+  - **Extensions** (TypeScript code): custom tools, commands, event hooks
+    - Locations: `~/.pi/agent/extensions/` (global), `.pi/extensions/` (project, loads only after the project is trusted)
+    - Quick test: `pi -e ./my-extension.ts`
+    - Reload with `/reload` (auto-discovered locations only; not while the agent is running)
+  - Writing your first custom tool: `pi.registerTool({ name, description, parameters: Type.Object(...), execute })`. The model reads the `description` and the TypeBox parameter schema
+  - **Skills**: `SKILL.md` folders following the [Agent Skills spec](https://agentskills.io/specification)
+  - **MCP**: built in (`pi mcp add …`, `/mcp`, `~/.pi/agent/mcp.json` / `.pi/mcp.json`)
+  - **Pi packages**: bundle extensions, skills, prompt templates and themes; share via npm or git
 
-### opencode
+## opencode
 - *Overview*
-  - What it is: open-source, multi-model terminal AI coding agent (by SST)
-  - Design philosophy: provider-agnostic, multi-agent support, built-in tool suite, TUI-first
-  - Key differentiators: native MCP support, agent "modes" (build/plan/ask), built-in file/code tools
-- *Setup Guide*
-  - Prerequisites: Go 1.21+ (or prebuilt binary), an API key or OAuth provider
+  - What it is: open-source AI coding agent with a terminal UI and a desktop app ([anomalyco/opencode](https://github.com/anomalyco/opencode), formerly `sst/opencode`; [opencode.ai](https://opencode.ai))
+  - Written in TypeScript (plus Rust); distributed as prebuilt binaries, so no Go or other toolchain is needed
+  - Design philosophy: provider-agnostic, built-in tool suite, TUI-first
+  - Two major versions: **V2 is current**. V1 commands (`opencode-ai` npm package, `opencode.ai/install`, the `sst/tap` / `anomalyco/tap/opencode` formula) still exist but conflict with V2. Use one or the other
+- *Setup Guide (V2)*
   - Install options:
-    - One-liner: `curl -fsSL https://opencode.ai/install | bash`
-    - npm: `npm install -g opencode-ai`
-    - Homebrew: `brew install sst/tap/opencode`
-  - First run: `opencode` in a project; TUI launches, model picker
+    - Script: `curl -fsSL https://opencode.ai/v2/install | bash`
+    - npm: `npm i -g @opencode/cli`
+    - Homebrew: `brew install anomalyco/tap/opencode-v2` (or `brew install opencode` from homebrew-core, updated less often)
+  - First run: `opencode` in a project; TUI launches
   - Authentication:
-    - `opencode auth login` (OAuth for Anthropic / OpenAI / Google)
-    - Or set `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env vars
-    - Local models: configure `baseURL` in config
-  - Configuration: `opencode.json` (project) or `~/.config/opencode/config.json` (global)
-    - Model defaults, temperature, max steps
-    - Custom agent definitions (name, system prompt, allowed tools, model)
+    - `/connect` in the TUI, or `opencode auth login` (e.g. `opencode auth login anthropic --method key`)
+    - Or set provider API keys as environment variables
+    - Local models: Ollama, LM Studio, vLLM, or any OpenAI-compatible endpoint
+  - Configuration: `opencode.json(c)` (project) or `~/.config/opencode/opencode.json(c)` (global). V2 ignores the old V1 `config.json`
+    - Model defaults; reasoning effort / token budgets through model **variants**
+    - Agent definitions (description, prompt, permissions, model, `steps`). The old agent fields `maxSteps` and `temperature` are legacy in V2
     - MCP server registration
   - Verifying the install: ask it to list files, run a simple code task
 - *Extending opencode*
-  - Built-in tools available out of the box (read/write/edit, bash, web search, etc.)
-  - Defining custom tools via MCP (Model Context Protocol) servers
-  - Writing a minimal MCP server (Node or Python) and registering it in config
-  - Agent profiles: create a "reviewer" agent vs. a "coder" agent with different prompts/toolsets
+  - Built-in agents: **build** (default, full access) and **plan** (read-only) as primary agents; **general** and **explore** as subagents. Switch primary agents with `Tab`
+  - Built-in tools: read, edit/write/patch, glob, grep, shell, webfetch, websearch, skill, subagents and more
+  - Custom tools and hooks: TypeScript **plugins** (`@opencode/plugin`, `.opencode/plugins/`)
+  - MCP servers: register in config
+  - Skills: `SKILL.md` folders loaded with the `skill` tool
+  - Agent profiles: e.g. a "reviewer" agent vs. a "coder" agent with different prompts and permissions
 
-### Hermes
+## Hermes Agent
 - *Overview*
-  - What it is: LLM harness focused on structured agent workflows and skill orchestration
-  - Design philosophy: skill-first architecture, declarative agent definitions, pipeline-oriented
-  - Key differentiators: emphasis on composable "skills" as first-class units; workflow/pipeline primitives; lighter on TUI, heavier on programmatic use
+  - What it is: Nous Research's open-source, self-improving agent ([NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent), [docs](https://hermes-agent.nousresearch.com/docs/)). Not to be confused with Nous Research's *Hermes* model family
+  - Written in Python
+  - Design philosophy: a persistent personal agent that learns. It writes and improves its own skills, keeps memory across sessions, and runs anywhere (local, Docker, SSH, serverless backends)
+  - Interfaces: full TUI, plus a messaging gateway (Telegram, Discord, Slack, WhatsApp, Signal, email), a cron scheduler and a desktop app
 - *Setup Guide*
-  - Prerequisites: Python ≥ 3.11 (or Rust toolchain for native builds), model API key
   - Install:
-    - PyPI: `pip install hermes-agent`
-    - Source: `git clone … && cd hermes && cargo build --release`
-  - First run: `hermes init` (scaffold config + skill directory)
-  - Configuration: `hermes.toml`
-    - Provider block (name, model, base_url, api_key env var)
-    - Default agent block (system prompt, max iterations, allowed skills)
-    - Logging and tracing settings
-  - Model setup examples (same pattern: Anthropic, OpenAI, Ollama)
-  - Verifying the install: `hermes run "summarize this file"` against a test doc
+    - Linux / macOS / WSL2: `curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`
+    - Windows: `iex (irm https://hermes-agent.nousresearch.com/install.ps1)`
+    - (`pip install hermes-agent` exists, but PyPI lags behind the current release.)
+  - First run: `hermes setup` (setup wizard), then `hermes` to start chatting
+  - Configuration: `~/.hermes/config.yaml` for settings, `~/.hermes/.env` for API keys
+    - `hermes config get/set/edit`, `hermes model` to switch provider and model
+  - Model setup examples: Nous Portal, OpenRouter, OpenAI, Anthropic, custom endpoints
+  - Verifying the install: `hermes doctor`, then a one-shot prompt with `hermes chat -q "…"`
 - *Extending Hermes*
-  - Skill anatomy: a skill = declarative metadata (name, description, parameters schema) + executable handler
-  - Writing a skill (Python handler example: a `translate` skill, a `query_db` skill)
-  - Loading skills: project `./skills/` directory vs. shared package
-  - Composing skills into a pipeline (e.g., fetch → extract → summarize → write)
-  - Declarative agent definitions in `hermes.toml`: bind a named agent to a subset of skills + model + prompt
+  - Skills: `SKILL.md` folders in `~/.hermes/skills/`, compatible with the [agentskills.io](https://agentskills.io) standard. Hermes can create and refine skills itself
+  - Tools: `hermes tools` to enable or disable toolsets
+  - MCP servers: `hermes mcp`
+  - Plugins: `hermes plugins`
+  - Subagents for parallel work; Python scripts that call tools over RPC
+  - Scheduled automations: `hermes cron`
 
-### Side-by-Side Comparison Table
+## Side-by-Side Comparison Table
 
-| Dimension | Pi | opencode | Hermes |
+| Dimension | Pi | opencode | Hermes Agent |
 |---|---|---|---|
-| Primary target | Terminal REPL, extensibility | Terminal TUI, multi-agent | Programmatic pipelines, skill composition |
-| Language | TypeScript | Go (binary) / TS extensions | Python / Rust |
-| Extension model | TS modules | MCP servers, built-in tools | Declarative skills + pipelines |
+| Primary target | Minimal terminal harness; SDK / RPC embedding | Terminal TUI coding agent (+ desktop app) | Persistent personal agent: TUI, messaging gateway, cron |
+| Language | TypeScript | TypeScript (+ Rust) | Python |
+| Extension model | TS extensions, Agent Skills, MCP, Pi packages | TS plugins, MCP servers, Agent Skills | Agent Skills (self-authored), plugins, MCP |
 | Multi-model | ✅ | ✅ | ✅ |
-| Config format | TS file | JSON | TOML |
-| Best for | Custom terminal workflows | Interactive coding, multi-agent | Structured batch/agent pipelines |
+| Config format | `settings.json` | `opencode.json(c)` | `config.yaml` + `.env` |
+| Best for | Building your own workflow on a small core | Interactive coding with built-in agents | Long-running assistant across devices and chat apps |

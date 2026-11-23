@@ -1,31 +1,40 @@
-## Skills *(new major section)*
+# Skills
 
-### What a Skill Is
-- Definition: a reusable, self-contained unit of capability the agent can invoke
-- Relationship: model (brain) → harness (body) → skills (hands/senses)
-- Skill vs. tool vs. function call vs. MCP server (terminology mapping)
+## What a Skill Is
+- Definition: a folder containing a `SKILL.md` file (name and description in frontmatter, then instructions), plus optional scripts, reference docs and assets. It packages know-how for one kind of task
+- The format is the open [Agent Skills specification](https://agentskills.io/specification). Pi implements it, Hermes Agent is compatible with it, and opencode uses `SKILL.md` folders through its `skill` tool
+- Progressive disclosure: the model sees only each skill's name and description until a task calls for it; then it loads the full instructions. Many skills cost few tokens until used
+- Relationship: model (brain) → harness (body) → tools (hands) → skills (playbooks for using them)
 
-### Skill Anatomy (General)
-- Metadata: name, description (the model reads this to decide when to use it), parameter schema, return type
-- Implementation: the executable logic (script, API call, DB query, file operation)
-- Lifecycle: load → schema registration → invocation → result formatting → error reporting
-- Conventions: idempotency, timeout, idempotent vs. side-effectful, streaming support
+## Terminology Map
+- **Tool / function**: an action the model can call, with a parameter schema (see [Tools](../tools/tools.md))
+- **MCP server**: a separate process or remote service that provides tools (see [MCP](../mcp/mcp.md))
+- **Extension / plugin**: code that changes the harness itself (Pi extensions, opencode plugins, Hermes plugins)
+- **Skill**: instructions and supporting files the model reads when relevant
+- Cross-reference table: what each harness calls each of these
 
-### Writing Skills — Worked Examples (per harness)
-- Pi: TypeScript extension with a typed function + docstring (model reads docstring)
-- opencode: MCP server exposing a tool (JSON-RPC, input/output schema)
-- Hermes: TOML metadata block + Python handler function with type hints
-- For each: a concrete example (e.g., "search internal docs" skill, "create a Jira ticket" skill)
+## Skill Anatomy
+- `SKILL.md` frontmatter: `name` (lowercase, hyphens), `description` (the model reads this to decide when to load the skill)
+- Body: direct, step-by-step instructions
+- Optional folders: `scripts/`, `references/`, `assets/`
+- Where they live:
+  - Pi: global and project skill directories (see Pi docs)
+  - opencode: skill directories, loaded with the `skill` tool
+  - Hermes Agent: `~/.hermes/skills/`
 
-### Managing a Skill Library
+## Writing Skills — Worked Examples
+- One example skill per harness (e.g. "release checklist", "write a migration in our house style")
+- Self-authored skills: Hermes Agent creates and refines skills from experience
+
+## Managing a Skill Library
 - Naming conventions and versioning
 - Discoverability: how the model picks the right skill (description quality matters)
-- Packaging and sharing: publishing to a registry, internal npm/pip/cargo package
+- Packaging and sharing: Pi packages (npm / git), skill hubs, internal repos
 - Deprecation and backward compatibility
 
-### Skill Quality and Safety
+## Skill Quality and Safety
 - Writing descriptions the model can actually interpret (avoid ambiguity)
-- Parameter validation and error messages the model can act on
-- Sandboxing: network access, filesystem scope, credential isolation
-- Cost control: token overhead of skill schemas, rate-limiting expensive calls
-- Audit logging: every skill invocation recorded with input/output
+- Keep `SKILL.md` lean; move long reference material into separate files
+- **Supply-chain risk**: a third-party skill can include scripts that run with the agent's permissions. Read skills before installing them, and treat skill hubs like package registries
+- Cost control: every installed skill's description sits in context
+- Audit: track which skills are installed and where they came from
